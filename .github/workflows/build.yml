@@ -1,0 +1,52 @@
+name: Build Speed APK
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Unpack project
+        run: unzip -q speed-src.zip -d proj
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Build debug APK
+        working-directory: proj
+        run: gradle assembleDebug --no-daemon -PappVersionCode=${{ github.run_number }}
+
+      - name: Collect APK
+        run: cp proj/app/build/outputs/apk/debug/app-debug.apk speed-alarm.apk
+
+      - name: Publish release (latest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest speed-alarm.apk \
+            --title "Speed build ${{ github.run_number }}" \
+            --notes "Speed alarm APK build ${{ github.run_number }}. Download speed-alarm.apk and install it." \
+            --latest
